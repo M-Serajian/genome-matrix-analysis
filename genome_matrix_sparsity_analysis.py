@@ -23,12 +23,15 @@ if __name__ == "__main__":
     # Start the timer before executing the function
     start_time = time.time()
 
+    print(args.disable_normalization)
+
     sparsity = kmer_matrix_sparsity(
         genome_list=os.path.abspath(args.genome_list),
         kmer_size=args.kmer_size,
         tmp_dir=args.tmp,
         min_val=args.min,
-        max_val=args.max
+        max_val=args.max,
+        disable_normalization=args.disable_normalization 
     )
 
     # Stop the timer after function execution
@@ -45,14 +48,14 @@ if __name__ == "__main__":
         f"Execution time: {execution_time:.2f} seconds\n"
     )
 
-    print(output_text)
+
 
     # Ensure the output directory exists
     output_dir = os.path.abspath(args.output)  # Assuming -o is stored in args.output
     os.makedirs(output_dir, exist_ok=True)
 
     # Determine if -d flag is enabled (1 for enabled, 0 for disabled)
-    d_status = 1 if args.d else 0
+    d_status = 1 if args.disable_normalization else 0
 
     # Construct the filename dynamically
     output_filename = f"feature_matrix_stats_k_min_{args.min}_max_{args.max}_d_{d_status}.txt"
