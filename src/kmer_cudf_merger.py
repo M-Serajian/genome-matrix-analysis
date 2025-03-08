@@ -6,17 +6,19 @@ import subprocess
 from src.run_gerbil import set_of_all_unique_kmers_extractor, single_genome_kmer_extractor
 
 
-def kmer_matrix_sparsity (genome_list, kmer_size, tmp_dir, min_val=1, max_val=10**9):
+def kmer_matrix_sparsity (genome_list, kmer_size, tmp_dir, min_val=1, max_val=10**9, disable_normalization=False):
+
     """Processes genome data and generates a Compressed Sparse Row (CSR) matrix representation."""
     
     # Define the output directory for extracted k-mers
     set_of_all_unique_kmers_dir = os.path.join(
         os.path.abspath(tmp_dir),
-        f"temporary_set_of_all_unique_kmers_min{min_val}_max{max_val}_kmer{kmer_size}_no_d.csv"
+        f"temporary_set_of_all_unique_kmers_min{min_val}_max{max_val}_kmer{kmer_size}_"
+        f"{'normalization_disabled' if disable_normalization else 'normalization_enabled'}.csv"
     )
     
-    # # Extract unique k-mers for the provided genome list
-    # set_of_all_unique_kmers_extractor(genome_list, set_of_all_unique_kmers_dir, kmer_size, min_val, max_val, tmp_dir)
+    # Extract unique k-mers for the provided genome list
+    set_of_all_unique_kmers_extractor(genome_list, set_of_all_unique_kmers_dir, kmer_size, min_val, max_val, tmp_dir, disable_normalization)
 
     # Load extracted k-mers into a cuDF DataFrame
     set_of_all_unique_kmers_dataframe = cudf.read_csv(set_of_all_unique_kmers_dir)
@@ -36,14 +38,18 @@ def kmer_matrix_sparsity (genome_list, kmer_size, tmp_dir, min_val=1, max_val=10
     # Total size of the feature matrix (rows: unique k-mers, columns: genome count)
     feature_matrix_size = cp.int64(len(set_of_all_unique_kmers_dataframe) * len(genome_dirs))
 
+
     # Iterate over each genome directory and extract k-mer frequency data
-    for genome_num, genome_dir in enumerate(genome_dirs):
+    for genome_number, genome_dir in enumerate(genome_dirs):
+        # Define the temporary DataFrame directory
+        tmp_genome_output_dir = os.path.join(
+            tmp_dir,
+            f"temporary_output_genome_{genome_number}_"
+            f"{'normalization_disabled' if disable_normalization else 'normalization_enabled'}.csv"
+        )
 
-        #tmp_dataframe_dir = single_genome_kmer_extractor(kmer_size, tmp_dir, genome_dir, genome_num)
-
-        tmp_dataframe_dir = os.path.join(tmp_dir, f"temporary_output_genome_{genome_num}.csv")
-
-        df_csv = cudf.read_csv(tmp_dataframe_dir)
+        single_genome_kmer_extractor(kmer_size, tmp_dir, tmp_genome_output_dir, genome_dir, genome_number, disable_normalization)
+        df_csv = cudf.read_csv(tmp_genome_output_dir)
         
         df_comp = set_of_all_unique_kmers_dataframe.reset_index()
         df_comp = df_comp.merge(df_csv, on="K-mer", how="right")
@@ -55,10 +61,12 @@ def kmer_matrix_sparsity (genome_list, kmer_size, tmp_dir, min_val=1, max_val=10
 
         nnz_count = nnz_count + size
 
-        if genome_num % 10 == 0 and genome_num != 0:
-            print(f"Processed {genome_num} genomes :", flush=True)
+        if genome_number % 1000 == 0 and genome_number != 0:
+            print(f"Processed {genome_number} genomes :", flush=True)
             print(f"Number of non-zero elements so far {nnz_count}", flush=True)
-            print(f"Current density is : {round (100*nnz_count/(len(set_of_all_unique_kmers_dataframe)*genome_num+1),2)}%")
+            print(f"Current density is : {round (100*nnz_count/(len(set_of_all_unique_kmers_dataframe)*genome_number+1),2)}%")
 
     
     return round (100*nnz_count/feature_matrix_size,2)
+
+
